@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  ListObjectsV2Command,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION!,
@@ -11,86 +16,78 @@ const s3 = new S3Client({
 
 const BUCKET = process.env.S3_BUCKET_NAME!;
 const PREFIX = process.env.S3_BASE_PREFIX!;
-const REGION = process.env.AWS_REGION!;
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const deviceIdFilter = searchParams.get("device_id");
-    const startTime = searchParams.get("start_time")
-      ? Number(searchParams.get("start_time"))
-      : null;
-    const endTime = searchParams.get("end_time")
-      ? Number(searchParams.get("end_time"))
-      : null;
+    const limit = Number(searchParams.get("limit") || 10);
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const page = Number(searchParams.get("page") || 1);
-    const limit = Number(searchParams.get("limit") || 20);
-
-    const listCmd = new ListObjectsV2Command({
+    const command = new ListObjectsV2Command({
       Bucket: BUCKET,
       Prefix: PREFIX,
+      MaxKeys: limit,
+      ContinuationToken: cursor,
     });
 
-    const s3Response = await s3.send(listCmd);
+    const res = await s3.send(command);
 
-    let records = s3Response.Contents?.map((obj) => {
-      if (!obj.Key) return null;
+    const records = (res.Contents || [])
+      .map((obj) => {
+        if (!obj.Key) return null;
 
-      // meters_output/unrecognized/IM000101_1765374516.jpg
-      const fileName = obj.Key.split("/").pop();
-      if (!fileName) return null;
+        const fileName = obj.Key.split("/").pop();
+        if (!fileName) return null;
 
-      const [device_id, tsPart] = fileName.split("_");
-      const timestamp = Number(tsPart?.replace(".jpg", ""));
+        const [device_id, tsPart] = fileName.split("_");
+        const timestamp = Number(tsPart?.replace(".jpg", ""));
 
-      if (!device_id || !timestamp) return null;
+        if (!device_id || !timestamp) return null;
 
-      return {
-        device_id,
-        timestamp,
-        s3_image_url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${obj.Key}`,
-      };
-    }).filter(Boolean) as {
-      device_id: string;
-      timestamp: number;
-      s3_image_url: string;
-    }[];
+        return {
+          device_id,
+          timestamp,
+          key: obj.Key,
+        };
+      })
+      .filter(Boolean) as {
+        device_id: string;
+        timestamp: number;
+        key: string;
+      }[];
 
-    // 🔍 FILTERS
-    if (deviceIdFilter) {
-      records = records.filter((r) => r.device_id === deviceIdFilter);
-    }
-
-    if (startTime) {
-      records = records.filter((r) => r.timestamp >= startTime);
-    }
-
-    if (endTime) {
-      records = records.filter((r) => r.timestamp <= endTime);
-    }
-
-    // 🕒 Sort latest first
+    // sort latest first (IMPORTANT)
     records.sort((a, b) => b.timestamp - a.timestamp);
 
-    const total = records.length;
+    const data = await Promise.all(
+      records.map(async (item) => {
+        const signedUrl = await getSignedUrl(
+          s3,
+          new GetObjectCommand({
+            Bucket: BUCKET,
+            Key: item.key,
+          }),
+          { expiresIn: 600 }
+        );
 
-    // 📄 PAGINATION
-    const startIndex = (page - 1) * limit;
-    const paginated = records.slice(startIndex, startIndex + limit);
+        return {
+          device_id: item.device_id,
+          timestamp: item.timestamp,
+          s3_image_url: signedUrl,
+        };
+      })
+    );
 
     return NextResponse.json({
-      page,
-      limit,
-      total,
-      data: paginated,
+      data,
+      nextCursor: res.IsTruncated
+        ? res.NextContinuationToken
+        : null,
+      hasMore: res.IsTruncated,
     });
-  } catch (error: any) {
-    console.error("S3 fetch error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch images" },
-      { status: 500 }
-    );
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

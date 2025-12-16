@@ -1,8 +1,13 @@
+"use client";
+import Stream from "./stream";
+
+
 function ImagesPage() {
   return (
-    <div>
-      <h1>Images Page</h1>
+    <div className="p-4">
+      <Stream />
     </div>
   );
 }
+
 export default ImagesPage;
