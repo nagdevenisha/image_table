@@ -57,8 +57,8 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
       <div className="w-full max-w-md">
         {/* Card */}
-        <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">
+        <div className="bg-card rounded-lg shadow-lg border border-gray-200 p-8">
+          <h2 className="text-2xl font-bold text-center text-primary mb-8">
             Create your account
           </h2>
 
@@ -140,7 +140,7 @@ export default function RegisterPage() {
             Already have an account?{" "}
             <Link
               href="/signin"
-              className="font-medium text-blue-600 hover:text-blue-500 underline transition"
+              className="font-medium text-primary hover:text-blue-500 underline transition"
             >
               Sign in
             </Link>

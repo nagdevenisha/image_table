@@ -44,9 +44,16 @@ export default function SignInPage() {
       <div className="w-full max-w-md">
         {/* Card */}
         <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">
-            Welcome back
-          </h2>
+          {/* <h2 className="text-2xl font-bold text-center text-foreground mb-4">
+            Sign Up
+          </h2> */}
+          <div className="flex justify-center mb-4">
+          <img
+            src="https://am-adex.aws.indirex.io/inditronics/assets/logo3-BIgLSLb1.png"
+            className="h-22 w-22"
+            alt="Logo"
+          />
+        </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -96,7 +103,7 @@ export default function SignInPage() {
 
           <p className="mt-6 text-center text-sm text-gray-600">
             Don’t have an account?{" "}
-            <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500 underline">
+            <Link href="/register" className="font-medium text-foreground hover:text-blue-500 underline">
               Sign up
             </Link>
           </p>

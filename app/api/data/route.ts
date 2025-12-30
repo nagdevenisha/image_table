@@ -15,53 +15,98 @@ const s3 = new S3Client({
 });
 
 const BUCKET = process.env.S3_BUCKET_NAME!;
-const PREFIX = process.env.S3_BASE_PREFIX!;
+const BASE_PREFIX = process.env.S3_BASE_PREFIX!;
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const limit = Number(searchParams.get("limit") || 10);
+    const limit = Number(searchParams.get("limit") || 20);
     const cursor = searchParams.get("cursor") || undefined;
+    const deviceId = searchParams.get("deviceId") || "";
+    const date = searchParams.get("date") || ""; // YYYY-MM-DD
 
-    const command = new ListObjectsV2Command({
-      Bucket: BUCKET,
-      Prefix: PREFIX,
-      MaxKeys: limit,
-      ContinuationToken: cursor,
-    });
+    /**
+     * ✅ S3-level filtering by deviceId
+     */
+    const prefix = deviceId
+      ? `${BASE_PREFIX}${deviceId}_`
+      : BASE_PREFIX;
 
-    const res = await s3.send(command);
+    let collected: {
+      device_id: string;
+      timestamp: number;
+      key: string;
+    }[] = [];
 
-    const records = (res.Contents || [])
-      .map((obj) => {
-        if (!obj.Key) return null;
+    let continuationToken: string | undefined = cursor;
+    let hasMore = true;
 
-        const fileName = obj.Key.split("/").pop();
-        if (!fileName) return null;
+    /**
+     * 🔁 Fetch until enough records AFTER filtering
+     */
+    while (collected.length < limit && hasMore) {
+      const command = new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: prefix,
+        MaxKeys: 200, // fetch more, filter later
+        ContinuationToken: continuationToken,
+      });
 
-        const [device_id, tsPart] = fileName.split("_");
-        const timestamp = Number(tsPart?.replace(".jpg", ""));
+      const res = await s3.send(command);
+      continuationToken = res.NextContinuationToken;
+      hasMore = Boolean(res.IsTruncated);
 
-        if (!device_id || !timestamp) return null;
+      const batch =
+        res.Contents?.map((obj) => {
+          if (!obj.Key) return null;
 
-        return {
-          device_id,
-          timestamp,
-          key: obj.Key,
-        };
-      })
-      .filter(Boolean) as {
-        device_id: string;
-        timestamp: number;
-        key: string;
-      }[];
+          const fileName = obj.Key.split("/").pop();
+          if (!fileName) return null;
 
-    // sort latest first (IMPORTANT)
-    records.sort((a, b) => b.timestamp - a.timestamp);
+          const [device_id, tsPart] = fileName.split("_");
+          const timestamp = Number(tsPart?.replace(".jpg", ""));
 
+          if (!device_id || !timestamp) return null;
+
+          return { device_id, timestamp, key: obj.Key };
+        }).filter(Boolean) as {
+          device_id: string;
+          timestamp: number;
+          key: string;
+        }[];
+
+      /**
+       * ✅ Date filtering using timestamp
+       */
+      const filtered = date
+        ? batch.filter((item) => {
+            const itemDate = new Date(item.timestamp * 1000)
+              .toISOString()
+              .slice(0, 10);
+            return itemDate === date;
+          })
+        : batch;
+
+      collected.push(...filtered);
+    }
+
+    /**
+     * ✅ CRITICAL: SORT AFTER COLLECTING
+     * Latest images ALWAYS first
+     */
+    collected.sort((a, b) => b.timestamp - a.timestamp);
+
+    /**
+     * ✅ Apply page limit
+     */
+    const pageData = collected.slice(0, limit);
+
+    /**
+     * ✅ Generate signed URLs
+     */
     const data = await Promise.all(
-      records.map(async (item) => {
+      pageData.map(async (item) => {
         const signedUrl = await getSignedUrl(
           s3,
           new GetObjectCommand({
@@ -81,13 +126,14 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       data,
-      nextCursor: res.IsTruncated
-        ? res.NextContinuationToken
-        : null,
-      hasMore: res.IsTruncated,
+      nextCursor: continuationToken ?? null,
+      hasMore,
     });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  } catch (error) {
+    console.error("S3 fetch error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch images" },
+      { status: 500 }
+    );
   }
 }
