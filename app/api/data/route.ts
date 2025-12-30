@@ -81,9 +81,13 @@ export async function GET(req: Request) {
        */
       const filtered = date
         ? batch.filter((item) => {
-            const itemDate = new Date(item.timestamp * 1000)
-              .toISOString()
-              .slice(0, 10);
+            const d = new Date(item.timestamp * 1000);
+            const itemDate =
+              d.getFullYear() +
+              "-" +
+              String(d.getMonth() + 1).padStart(2, "0") +
+              "-" +
+              String(d.getDate()).padStart(2, "0");
             return itemDate === date;
           })
         : batch;

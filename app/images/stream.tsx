@@ -15,6 +15,16 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@radix-ui/react-dropdown-menu";
 import { DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {FilterChip} from './filterchip';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
+
 
 type StreamItem = {
   device_id: string;
@@ -154,6 +164,37 @@ const filteredData = data.filter((item) => {
   return deviceMatch && dateMatch;
 });
 
+const getVisiblePages = () => {
+  const total = cursorStack.length
+  const pages: (number | "ellipsis")[] = []
+
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+
+  pages.push(1)
+
+  if (currentPage > 3) {
+    pages.push("ellipsis")
+  }
+
+  const start = Math.max(2, currentPage - 1)
+  const end = Math.min(total - 1, currentPage + 1)
+
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+
+  if (currentPage < total - 2) {
+    pages.push("ellipsis")
+  }
+
+  pages.push(total)
+
+  return pages
+}
+
+
 
 
   return (
@@ -191,47 +232,63 @@ const filteredData = data.filter((item) => {
       </div>
 
       {/* 🔢 Number Pagination (TOP) */}
-    <div className="flex justify-between items-center mb-3">
-    {/* Pagination */}
-    <div className="flex gap-2 items-center">
-        {(() => {
-        const pages: number[] = [];
+      <div className=" flex justify-between">
+    <Pagination className="mb-4 flex justify-start">
+  <PaginationContent>
 
-        const start = Math.max(1, currentPage - 1);
-        const end = Math.min(cursorStack.length, currentPage + 1);
-
-        for (let i = start; i <= end; i++) {
-            pages.push(i);
+    {/* Previous */}
+    <PaginationItem>
+      <PaginationPrevious
+        onClick={() => currentPage > 1 && fetchImages(currentPage - 1)}
+        className={
+          currentPage === 1
+            ? "pointer-events-none opacity-50"
+            : "cursor-pointer"
         }
+      />
+    </PaginationItem>
 
-        return pages.map((page) => (
-            <Button
-            key={page}
+    {/* Page Numbers */}
+    {getVisiblePages().map((page, index) =>
+      page === "ellipsis" ? (
+        <PaginationItem key={`e-${index}`}>
+          <PaginationEllipsis />
+        </PaginationItem>
+      ) : (
+        <PaginationItem key={page}>
+          <PaginationLink
+            isActive={currentPage === page}
             onClick={() => fetchImages(page)}
-            disabled={loading}
-            className={`px-3 py-1 border rounded
-                ${currentPage === page ? "bg-primary text-white" : ""}
-            `}
-            >
+          >
             {page}
-            </Button>
-        ));
-        })()}
+          </PaginationLink>
+        </PaginationItem>
+      )
+    )}
 
-        {hasMore && (
-        <button
-            onClick={() => fetchImages(cursorStack.length + 1)}
-            className="px-3 py-1 border rounded"
-        >
-            +
-        </button>
-        )}
-    </div>
+    {/* Next */}
+    <PaginationItem>
+      <PaginationNext
+        onClick={() =>
+          currentPage < cursorStack.length &&
+          fetchImages(currentPage + 1)
+        }
+        className={
+          currentPage === cursorStack.length
+            ? "pointer-events-none opacity-50"
+            : "cursor-pointer"
+        }
+      />
+    </PaginationItem>
+
+  </PaginationContent>
+</Pagination>
+
 
   {/* Filter Controls (RIGHT END) */}
   <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <button className="px-4 py-2 text-sm text-foreground bg-card border border-border rounded-lg hover:border-primary flex items-center gap-2">
+      <button className="px-3 py-2 w-36 text-sm text-foreground bg-card border border-border rounded-lg hover:border-primary flex items-center gap-2">
         <Filter className="w-4 h-4" />
         Filter Events
       </button>
@@ -304,6 +361,7 @@ const filteredData = data.filter((item) => {
     </DropdownMenuContent>
   </DropdownMenu>
 </div>
+</div>
      <div className="flex gap-2 flex-wrap">
     {Object.entries(activeFilters).map(([key, value]) =>
         value ? (
@@ -329,7 +387,7 @@ const filteredData = data.filter((item) => {
         ) : null
     )}
     </div>
-  </div>
+  {/* </div> */}
  
 
 
