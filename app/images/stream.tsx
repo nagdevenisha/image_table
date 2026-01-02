@@ -361,7 +361,6 @@ const getVisiblePages = () => {
     </DropdownMenuContent>
   </DropdownMenu>
 </div>
-</div>
      <div className="flex gap-2 flex-wrap">
     {Object.entries(activeFilters).map(([key, value]) =>
         value ? (
@@ -386,6 +385,7 @@ const getVisiblePages = () => {
         />
         ) : null
     )}
+    </div>
     </div>
   {/* </div> */}
  
